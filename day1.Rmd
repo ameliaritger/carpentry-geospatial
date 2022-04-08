@@ -1,0 +1,254 @@
+---
+title: "day1"
+author: "Amelia Ritger"
+date: "4/7/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, messages = FALSE)
+```
+
+Geospatial data in R workshop, Day 1
+
+https://ucsbcarpentry.github.io/2022-04-07-ucsb-r-geospatial/01-raster-structure/
+
+```{r}
+library(raster)
+library(rgdal)
+library(tidyverse) #ggplot and dplyr
+```
+
+## PART 1 Intro to rasters
+
+Get geospatial data for specific image
+```{r}
+GDALinfo("data/NEON-DS-Airborne-Remote-Sensing/HARV/DSM/HARV_dsmCrop.tif")
+
+#open first raster
+dsm_harv <- raster("data/NEON-DS-Airborne-Remote-Sensing/HARV/DSM/HARV_dsmCrop.tif")
+dsm_harv
+
+summary(dsm_harv)
+summary(dsm_harv, maxsamp=ncell(dsm_harv))
+
+#turn dsm_harv into tidy dataframe with an xy coord system
+dsm_harv_df <- as.data.frame(dsm_harv, xy=TRUE)
+str(dsm_harv_df)
+```
+
+Plot the first raster (raster = continuous dataset and each pixel has a value from 0 to 255; vector = lines or points and polygons and noncontinuous dataset)
+```{r}
+ggplot() +
+  geom_raster(data=dsm_harv_df, aes(x=x, y=y, fill=HARV_dsmCrop)) + #get fill= from str(dsm_harv_df), tells you value of elevation associated with each pixel
+  scale_fill_viridis_c() +
+  coord_quickmap()
+
+#quickplot
+plot(dsm_harv)
+```
+
+CRS formatting
+```{r}
+#view CRS string (aka the projection)
+crs(dsm_harv)
+resm(dsm_harv) #see resolution and pixel area
+
+#find min and max values of dataset
+minvalue(dsm_harv)
+maxvalue(dsm_harv)
+
+#set the min and max values (tell R to put them in order)
+dsm_harv <- setMinMax(dsm_harv)
+```
+
+Raster bands (single or multi - see workshop website)
+```{r}
+nlayers(dsm_harv) #aka this is a single band
+```
+
+See if values fall where they should be
+```{r}
+ggplot(data = dsm_harv_df, aes(HARV_dsmCrop)) +
+  geom_histogram(bins=40)
+```
+
+Challenge
+```{r}
+GDALinfo("data/NEON-DS-Airborne-Remote-Sensing/HARV/DSM/HARV_dsmCrop.tif")
+
+#Does this file have the same CRS as dsm_harv?
+
+#YES
+
+#what is the NoDataValue?
+
+#-9999
+
+#What is the resolution of the raster data?
+
+# 1x1? 
+
+#How large would a 5x5 pixel area be on the Earth's surface?
+
+#units in meters, so 5x5 m
+
+#Is the file a multi or single raster band?
+
+#single
+```
+
+## PART 2 Plot raster data
+
+```{r}
+#Create a new variable within df
+dsm_harv_df <- dsm_harv_df %>%
+  mutate(fct_elevation = cut(HARV_dsmCrop, breaks=3)) #make three even breaks of the elevation data
+
+#identify break points
+unique(dsm_harv_df$fct_elevation)
+
+summary(dsm_harv_df)
+
+ggplot(data=dsm_harv_df, aes(fct_elevation)) +
+  geom_bar()
+
+#identify break points
+unique(dsm_harv_df$fct_elevation)
+```
+
+Create custom bins
+```{r}
+#set bin values 
+custom_bins <- c(300, 350, 400, 450)
+
+dsm_harv_df <- dsm_harv_df %>%
+  mutate(fct_elevation2 = cut(HARV_dsmCrop, breaks=custom_bins)) #make three even breaks of the elevation data
+
+summary(dsm_harv_df)
+```
+Create raster with terrain colors identified
+```{r}
+ggplot(data=dsm_harv_df, aes(x=x, y=y, fill=fct_elevation2)) +
+  geom_raster() +
+  scale_fill_manual(values=terrain.colors(3)) + 
+  coord_quickmap()
+
+my_colors <- terrain.colors(3)
+
+ggplot(data=dsm_harv_df, aes(x=x, y=y, fill=fct_elevation2)) +
+  geom_raster() +
+  scale_fill_manual(values=my_colors, name = "Elevation") + 
+  theme(axis.title = element_blank())
+  coord_quickmap()
+```
+
+Layering rasters
+```{r}
+dsm_hill_harv <- raster("data/NEON-DS-Airborne-Remote-Sensing/HARV/DSM/HARV_DSMhill.tif")
+dsm_hill_harv
+
+dsm_hill_harv_df <- as.data.frame(dsm_hill_harv, xy=TRUE)
+str(dsm_hill_harv_df)
+```
+
+Plot the hillshape 
+```{r}
+ggplot(data=dsm_hill_harv_df, aes(x=x, y=y, alpha=HARV_DSMhill)) +
+  geom_raster() +
+  scale_alpha(range=c(0.15, 0.65), guide="none") +
+  coord_quickmap()
+```
+
+Combine hill data and elevation data in one plot
+```{r}
+ggplot() +
+  geom_raster(data=dsm_harv_df, aes(x=x, y=y, fill=HARV_dsmCrop)) +
+  geom_raster(data=dsm_hill_harv_df, aes(x=x, y=y, alpha=HARV_DSMhill)) +
+  scale_fill_viridis_c() +
+  scale_alpha(range=c(0.15, 0.65), guide="none") +
+  ggtitle("Elevation with hillshade") +
+  coord_quickmap()
+```
+
+## PART 3 Reproject raster data 
+
+Using DTM data (ditigal terrain model, bare earth without trees or houses etc), not DSM data (digital surface model, LIDAR source with bumps like trees but not actual ground)
+```{r}
+dtm_harv <- raster("data/NEON-DS-Airborne-Remote-Sensing/HARV/DTM/HARV_dtmCrop.tif")
+dtm_hill_harv <- raster("data/NEON-DS-Airborne-Remote-Sensing/HARV/DTM/HARV_DTMhill_WGS84.tif")
+
+dtm_harv_df <- as.data.frame(dtm_harv, xy=TRUE)
+dtm_hill_harv_df <- as.data.frame(dtm_hill_harv, xy=TRUE)
+
+crs(dtm_harv)
+crs(dtm_hill_harv)
+
+compareCRS(dtm_harv, dtm_hill_harv)
+```
+
+Rasters have to be the same CRS to overlay or layer!!
+
+Reproject the raster to make the data match
+```{r}
+dtm_hill_reprojected <- projectRaster(dtm_hill_harv, crs=crs(dtm_harv))
+
+#make a new df
+dtm_hill_reprojected_df <- as.data.frame(dtm_hill_reprojected, xy=TRUE)
+
+str(dtm_hill_reprojected_df) #check new projected df structure
+
+ggplot() +
+     geom_raster(data = dtm_harv_df , 
+                 aes(x = x, y = y, 
+                  fill = HARV_dtmCrop)) + 
+     geom_raster(data = dtm_hill_reprojected_df, 
+                 aes(x = x, y = y, 
+                   alpha = HARV_DTMhill_WGS84)) +
+     scale_fill_gradientn(name = "Elevation", colors = terrain.colors(10)) + 
+     coord_quickmap()
+
+#y axis is the number of meters away from the origin of the projection
+```
+
+## PART 4 Raster calculations
+
+DSM - DTM = CHM (canopy height model)
+
+let's start to build it!
+```{r}
+dsm_harv_df
+str(dsm_harv_df)
+
+#plot terrain model
+ggplot() +
+  geom_raster(data=dtm_harv_df, aes(x=x, y=y, fill=HARV_dtmCrop)) +
+  scale_fill_gradientn(colors=terrain.colors(10)) +
+  coord_quickmap()
+
+#plot surface model
+ggplot() +
+  geom_raster(data=dsm_harv_df, aes(x=x, y=y, fill=HARV_dsmCrop)) +
+  scale_fill_gradientn(colors=terrain.colors(10)) +
+  coord_quickmap()
+
+#we didn't have enough time to do CHM but look at website to finish it up...
+```
+
+Multi band color
+```{r}
+rgb_band1_harv <- raster("data/NEON-DS-Airborne-Remote-Sensing/HARV/RGB_Imagery/HARV_RGB_Ortho.tif")
+
+nbands(rgb_band1_harv)
+
+rgb_band1_harv_df <- as.data.frame(rgb_band1_harv, xy=TRUE)
+
+ggplot() +
+  geom_raster(data=rgb_band1_harv_df, aes(x=x, y=y, alpha=HARV_RGB_Ortho)) +
+  coord_quickmap()
+
+#new function for color
+rgb_stack_harv <- stack("data/NEON-DS-Airborne-Remote-Sensing/HARV/RGB_Imagery/HARV_RGB_Ortho.tif")
+rgb_stack_harv #check it out, there are three bands AKA RGB!
+```
+

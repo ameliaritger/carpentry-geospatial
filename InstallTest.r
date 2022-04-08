@@ -9,11 +9,10 @@ library(raster)
 # still need a polygon!!!!
 
 # everything should be relative to "here"
-setwd(".")
-buildings <- st_read("data/Campus_Buildings.shp")
-signs <- st_read("data/Inventory.shp")
+buildings <- st_read("data/install-test/Campus_Buildings.shp")
+signs <- st_read("data/install-test/Inventory.shp")
 
-campus_DEM <- raster("data/WestCampusDEM.tif")
+campus_DEM <- raster("data/install-test/WestCampusDEM.tif")
 campus_DEM_df <- as.data.frame(campus_DEM, xy = TRUE)
 
 # geom_sf(data = habitat, size = 0.1, color = 'black', fill = "cyan1")
